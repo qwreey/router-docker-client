@@ -5,8 +5,10 @@ The workload-side integration kit for
 actually sit behind a router-docker instance as its network boundary, as opposed to
 router-docker itself (the boundary container). Split out of
 [code-docker](https://github.com/qwreey/code-docker), router-docker's first real consumer,
-since none of this is code-docker-specific even though the env var names still show that
-origin.
+since none of this is code-docker-specific — `netfilter-fix/fix.sh`'s env vars
+(`NETFILTER_FIX_INTERNAL_NETWORK`/`NETFILTER_FIX_EXTRA_INTERNAL_NETWORKS`) are named after the
+tool itself rather than that origin, though its default network name (`code-docker-internal`)
+still nods to it as the first consumer.
 
 ## What's here
 

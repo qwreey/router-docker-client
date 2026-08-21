@@ -29,20 +29,21 @@
 # so tearing down the stack doesn't leave a stale DOCKER-USER ACCEPT sitting on a host that
 # no longer needs it.
 #
-# NETWORK_NAMES is a space-separated list, not a single name - CODE_DOCKER_INTERNAL_NETWORK
-# (env var name kept as-is from this script's code-docker origin; defaults to
-# code-docker-internal) is the consuming project's own primary internal network, and
-# CODE_DOCKER_EXTRA_INTERNAL_NETWORKS is for any additional `internal: true` network a
-# sibling/overlay project attaches router to. Kept as two separate env vars deliberately: a
-# sibling overlay setting CODE_DOCKER_EXTRA_INTERNAL_NETWORKS can never accidentally clobber
-# the primary project's own default exemption, since Compose environment merging replaces a key's value
-# wholesale rather than appending to it.
+# NETWORK_NAMES is a space-separated list, not a single name - NETFILTER_FIX_INTERNAL_NETWORK
+# (named after this tool itself, not any particular consumer - see CLAUDE.md's env var naming
+# note; defaults to code-docker-internal since code-docker was this tool's first consumer) is
+# the consuming project's own primary internal network, and NETFILTER_FIX_EXTRA_INTERNAL_NETWORKS
+# is for any additional `internal: true` network a sibling/overlay project attaches router to.
+# Kept as two separate env vars deliberately: a sibling overlay setting
+# NETFILTER_FIX_EXTRA_INTERNAL_NETWORKS can never accidentally clobber the primary project's own
+# default exemption, since Compose environment merging replaces a key's value wholesale rather
+# than appending to it.
 
 set -eu
 
-NETWORK_NAME="${CODE_DOCKER_INTERNAL_NETWORK:-code-docker-internal}"
-NETWORK_NAMES="$NETWORK_NAME ${CODE_DOCKER_EXTRA_INTERNAL_NETWORKS:-}"
-COMMENT_TAG="code_docker_internal_forward_fix"
+NETWORK_NAME="${NETFILTER_FIX_INTERNAL_NETWORK:-code-docker-internal}"
+NETWORK_NAMES="$NETWORK_NAME ${NETFILTER_FIX_EXTRA_INTERNAL_NETWORKS:-}"
+COMMENT_TAG="netfilter_fix_internal_forward_fix"
 
 current_bridge() {
 	name="$1"
