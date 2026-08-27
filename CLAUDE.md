@@ -34,6 +34,22 @@ name they reference (`code-docker-internal`) still nods to it as the first consu
   `netinit-docker` does **not** replace `netinit/` — a non-Docker engine still needs the
   portable sidecar, and `netinit-docker` is Docker-only by construction (it talks to the
   Docker API and `/var/run/docker/netns` directly). No dependency on `netshare/`.
+- `dns-local/` — a long-lived supervised program that gives a container behind router a
+  DNS setup that actually works on an `internal: true` network. Docker's embedded DNS
+  (`127.0.0.11`) still resolves same-network names there, but answers anything it doesn't
+  own with an immediate, **definitive** SERVFAIL (no route to forward on), so both it and
+  router are needed - and putting them in `/etc/resolv.conf` as two `nameserver` lines
+  does *not* work, because only resolvers that retry past a definitive SERVFAIL fail over
+  (glibc's NSS does; `dig` and Node's runtime don't, and reordering just moves the problem
+  onto the local names instead). `dns-local` runs `dnsmasq --strict-order` with both
+  upstreams and points `/etc/resolv.conf` at it alone, so the failover happens once,
+  correctly, in one place. `--strict-order` is load-bearing: without it dnsmasq's default
+  "fastest responder wins" picks `127.0.0.11`'s bogus SERVFAIL every time, which is worse
+  than doing nothing. Came from code-docker (where it shipped 2026-08-10) and moved here
+  2026-08-27 when roblox-studio-docker hit the same bug in its worst form - only
+  `127.0.0.11` in `resolv.conf`, so *no* client class had external DNS at all and Roblox
+  Studio failed at launch with "Temporary failure in name resolution". Optionally uses
+  `netshare/`'s `wait_until` for a nicer startup log; works without it.
 - `netshare/` — the shared POSIX `sh` functions `netinit/` (and code-docker's own
   bootstrap/dind sidecar) use: `wait_until`, `apply_default_route`, `apply_nameserver`.
   `netinit-docker/` does not use it — it isn't a per-target entrypoint script and has its
@@ -51,11 +67,17 @@ needed anywhere when this repo changes:
   build:
     context: https://github.com/qwreey/router-docker-client.git#main:netinit
   ```
-- As a single subdirectory pulled into an existing image (for `netshare/`, from inside
-  someone else's own Dockerfile):
+- As a single subdirectory pulled into an existing image (for `netshare/` and
+  `dns-local/`, from inside someone else's own Dockerfile):
   ```dockerfile
   ADD https://github.com/qwreey/router-docker-client.git#main:netshare /netshare
+  ADD https://github.com/qwreey/router-docker-client.git#main:dns-local /dns-local
   ```
+  `dns-local/` additionally needs `dnsmasq` installed in the consuming image, and wants to
+  be run as a supervised program (it stays in the foreground for its own upkeep loop). A
+  consumer that also runs standalone - with no router to point at - should default
+  `DNS_LOCAL_ENABLED=false` in its own wrapper and let its router-attached overlay turn it
+  on, the same shape `netinit`'s own opt-in uses.
 
 Both use a **floating `#main` ref**, not a pinned commit/tag — deliberately, since pinning
 would just move the "who has to remember to bump this" burden from a submodule pointer to a

@@ -11,6 +11,11 @@ network boundary. See `CLAUDE.md` for the full design and exact usage snippets.
   namespace from the host, so the target itself needs zero capabilities; also still installs
   the `DOCKER-USER` forward exemptions that used to live in `netfilter-fix/` (that directory
   was renamed into this one, since both jobs are reconciled from the same Docker API loop).
+- `dns-local/` — a local, strict-order DNS forwarder for a container on an `internal: true`
+  network. Docker's embedded DNS resolves same-network names there but answers everything
+  else with an immediate, definitive SERVFAIL, and listing it alongside router as two
+  `nameserver` lines only works for resolvers that retry past that (glibc does, `dig` and
+  Node don't). This makes the failover happen once, correctly, inside dnsmasq.
 - `netshare/` — shared shell functions the above (and any similar entrypoint script) use.
 
 Consumed via Docker/Compose's native remote-git support (`build.context`/`ADD` with a git
