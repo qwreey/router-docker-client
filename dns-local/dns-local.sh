@@ -100,8 +100,16 @@ LAST_ROUTER_IP=""
 # itself gets recreated, a rare event, and a ~1s DNS blip during the swap
 # is an acceptable trade for not depending on --servers-file's SIGHUP
 # reload semantics, which weren't verified as part of this.
+#
+# It takes router's IP as an argument instead of looking it up itself: once
+# /etc/resolv.conf points at this very dnsmasq, a lookup made after killing it
+# can't succeed, which is how an IP change used to leave the container with no
+# resolver at all (and this program still RUNNING, looping on failed lookups).
+resolve_router() {
+    getent hosts "$ROUTER_HOSTNAME" 2>/dev/null | awk '{ print $1; exit }'
+}
 start_dnsmasq() {
-    router_ip="$(getent hosts "$ROUTER_HOSTNAME" 2>/dev/null | awk '{ print $1; exit }')"
+    router_ip="$1"
     [ -z "$router_ip" ] && return 1
     dnsmasq --no-daemon --no-resolv --strict-order \
         --listen-address=127.0.0.1 --bind-interfaces \
@@ -113,12 +121,19 @@ start_dnsmasq() {
 
 trap 'kill "$DNSMASQ_PID" 2>/dev/null; exit 0' TERM INT
 
+# Look router up through Docker's embedded resolver, not a leftover of our own: when
+# this program is restarted inside a running container, /etc/resolv.conf still points
+# at the dnsmasq that just exited, and every lookup below would fail. 127.0.0.11 is
+# the same resolver dnsmasq uses as its first upstream, and this file is rewritten to
+# point at 127.0.0.1 as soon as dnsmasq is up, so nothing else is lost by it.
+printf 'nameserver 127.0.0.11\noptions ndots:0\n' > /etc/resolv.conf
+
 if command -v wait_until >/dev/null 2>&1; then
     wait_until "router's DNS forwarder" 60 2 getent hosts "$ROUTER_HOSTNAME" \
         || echo >&2 "dns-local: could not resolve '$ROUTER_HOSTNAME' after 60s - starting anyway, will keep retrying"
 fi
 
-until start_dnsmasq; do
+until start_dnsmasq "$(resolve_router)"; do
     sleep 2
 done
 
@@ -138,11 +153,18 @@ fi
 
 while true; do
     sleep 5
-    router_ip="$(getent hosts "$ROUTER_HOSTNAME" 2>/dev/null | awk '{ print $1; exit }')"
+    if ! kill -0 "$DNSMASQ_PID" 2>/dev/null; then
+        # Died on its own: nothing can be resolved without it, so bring it back on
+        # the last known router IP rather than waiting on a lookup that can't work.
+        echo >&2 "dns-local: dnsmasq exited, restarting it (router=$LAST_ROUTER_IP)"
+        start_dnsmasq "$LAST_ROUTER_IP"
+        continue
+    fi
+    router_ip="$(resolve_router)"
     if [ -n "$router_ip" ] && [ "$router_ip" != "$LAST_ROUTER_IP" ]; then
         echo "dns-local: router IP changed ($LAST_ROUTER_IP -> $router_ip), restarting local resolver"
         kill "$DNSMASQ_PID" 2>/dev/null
         wait "$DNSMASQ_PID" 2>/dev/null
-        start_dnsmasq
+        start_dnsmasq "$router_ip"
     fi
 done
