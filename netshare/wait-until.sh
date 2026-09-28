@@ -20,7 +20,7 @@
 # That cap means <test-command> must be a real command, not a shell function.
 #
 # Consumers fetch this directory directly via a Dockerfile `ADD
-# https://github.com/qwreey/router-docker-client.git#main:netshare <dest>`
+# https://github.com/qwreey/router-docker-client.git#<tag>:netshare <dest>`
 # (or the same URL as a Compose `build.context`) rather than vendoring a
 # local copy - see this repo's own README.md.
 wait_until() {

@@ -58,20 +58,21 @@ name they reference (`code-docker-internal`) still nods to it as the first consu
 ## How consumers pull this in
 
 **Not a git submodule.** Every consumer fetches directly at build time via Docker/Compose's
-native remote-git support — no local checkout, no submodule bookkeeping, no bump-commit
-needed anywhere when this repo changes:
+native remote-git support, pinned to a **release tag** of this repo (`ROUTER_CLIENT_REF`):
 
 - As a whole service's build context (for `netinit`/`netinit-docker`, each with their own
   `Dockerfile`):
   ```yaml
   build:
-    context: https://github.com/qwreey/router-docker-client.git#main:netinit
+    context: https://github.com/qwreey/router-docker-client.git#${ROUTER_CLIENT_REF:-v0.1.0}:netinit-docker
   ```
 - As a single subdirectory pulled into an existing image (for `netshare/` and
-  `dns-local/`, from inside someone else's own Dockerfile):
+  `dns-local/`, from inside someone else's own Dockerfile), each in its own `FROM scratch`
+  stage so a BuildKit named context of the same name can swap in a local checkout:
   ```dockerfile
-  ADD https://github.com/qwreey/router-docker-client.git#main:netshare /netshare
-  ADD https://github.com/qwreey/router-docker-client.git#main:dns-local /dns-local
+  FROM scratch AS netshare
+  ARG ROUTER_CLIENT_REF=v0.1.0
+  ADD https://github.com/qwreey/router-docker-client.git#${ROUTER_CLIENT_REF}:netshare /
   ```
   `dns-local/` additionally needs `dnsmasq` installed in the consuming image, and wants to
   be run as a supervised program (it stays in the foreground for its own upkeep loop). A
@@ -79,14 +80,19 @@ needed anywhere when this repo changes:
   `DNS_LOCAL_ENABLED=false` in its own wrapper and let its router-attached overlay turn it
   on, the same shape `netinit`'s own opt-in uses.
 
-Both use a **floating `#main` ref**, not a pinned commit/tag — deliberately, since pinning
-would just move the "who has to remember to bump this" burden from a submodule pointer to a
-URL string in every consumer, defeating the point. The real trade-off: every build needs
-network access to GitHub (even a no-op rebuild re-resolves the ref — BuildKit does cache
-the clone per machine/ref, so this mostly costs cold/CI/fresh-clone builds, not every single
-local iteration), and a broken push here immediately affects every consumer's next build.
-Given how small and low-risk this code is, that's judged an acceptable trade — but it's a
-real one, not a free lunch.
+**Why a tag, not a floating `#main`:** a floating ref only means "newest as of whenever
+that image was last built". `docker compose up -d` never rebuilds an existing image, so
+each consumer container silently kept whatever `main` was on its own last build, and a
+fix pushed here reached some containers and not others. A tag makes "which netshare/
+dns-local does this image have" a fact written in the consumer's repo instead of an
+accident of build timing.
+
+**Releasing:** push the change, tag it (`vX.Y.Z`), push the tag, then run code-docker's
+`./dev-bump-router-client.sh vX.Y.Z` from a code-docker checkout. It rewrites every
+consumer's pin it finds under that checkout (`builds/*`, `dev/*`, code-docker itself) and
+commits each one. `netinit/Dockerfile` in this repo pins itself: set its default to the
+tag being cut, in the commit that gets the tag. A tag must exist on GitHub before any
+consumer points at it, or that consumer's build fails.
 
 Note BuildKit's git-context/`ADD` support does a **full clone** of this repo, not a sparse
 checkout of just the requested subdirectory ([moby/buildkit#2116](https://github.com/moby/buildkit/pull/2116))

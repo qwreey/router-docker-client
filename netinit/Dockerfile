@@ -6,6 +6,8 @@
 # code-docker's CLAUDE.md ("router" section) for a worked example of wiring this in.
 FROM alpine:latest
 RUN apk add --no-cache iproute2
-ADD https://github.com/qwreey/router-docker-client.git#main:netshare /netshare
+# Pinned to this repo's own tag: set it to the tag being cut, in the commit that gets it.
+ARG ROUTER_CLIENT_REF=v0.1.0
+ADD https://github.com/qwreey/router-docker-client.git#${ROUTER_CLIENT_REF}:netshare /netshare
 COPY netinit-entrypoint.sh /netinit-entrypoint.sh
 ENTRYPOINT ["/netinit-entrypoint.sh"]

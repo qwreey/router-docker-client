@@ -268,15 +268,15 @@ reconcile() {
 	exempt_nets="$(printf '%s' "$networks_json" | jq -r --arg ex "$LABEL_EXEMPT" '
 		.[] | select(.Labels[$ex] == "true") | .Id')"
 
-	# Deprecated env path, kept for one release cycle. Consumers pull this repo through
-	# Docker's remote-git build context on a floating ref, and Docker CACHES that fetch -
-	# a rename here has silently failed to reach a consumer before (CODE_DOCKER_* ->
-	# NETFILTER_FIX_*), with the old default quietly masking it. So the env list keeps
-	# working, and taking that path is announced rather than assumed.
+	# Deprecated env path, kept for one release cycle. A consumer's .env and the image it
+	# runs move independently (an image only changes on a rebuild) - a rename here has
+	# silently failed to reach a consumer before (CODE_DOCKER_* -> NETFILTER_FIX_*), with
+	# the old default quietly masking it. So the env list keeps working, and taking that
+	# path is announced rather than assumed.
 	legacy_nets="${NETFILTER_FIX_INTERNAL_NETWORK:-} ${NETFILTER_FIX_EXTRA_INTERNAL_NETWORKS:-}"
 	for net in $legacy_nets; do
 		[ -n "$net" ] || continue
-		warn_once "legacy-$net" "network '${net}' came from the deprecated NETFILTER_FIX_* env vars - move it to a '${LABEL_EXEMPT}: \"true\"' label on the network itself (and rebuild with --no-cache; Docker caches this repo's remote-git context)"
+		warn_once "legacy-$net" "network '${net}' came from the deprecated NETFILTER_FIX_* env vars - move it to a '${LABEL_EXEMPT}: \"true\"' label on the network itself"
 		net_id="$(docker_api "/networks/${net}" | jq -r '.Id // empty')"
 		[ -n "$net_id" ] && exempt_nets="$exempt_nets
 $net_id"
