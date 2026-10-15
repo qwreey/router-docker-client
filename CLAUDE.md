@@ -45,8 +45,9 @@ name they reference (`code-docker-internal`) still nods to it as the first consu
   upstreams and points `/etc/resolv.conf` at it alone, so the failover happens once,
   correctly, in one place. `--strict-order` is load-bearing: without it dnsmasq's default
   "fastest responder wins" picks `127.0.0.11`'s bogus SERVFAIL every time, which is worse
-  than doing nothing. Came from code-docker (where it shipped 2026-08-10) and moved here
-  2026-08-27 when roblox-studio-docker hit the same bug in its worst form - only
+  than doing nothing. It keeps no cache of its own (`--cache-size=0`): Docker's 600s TTL
+  kept a recreated router's old IP alive for up to ten minutes - see the script. Came
+  from code-docker (where it shipped 2026-08-10) and moved here 2026-08-27 when roblox-studio-docker hit the same bug in its worst form - only
   `127.0.0.11` in `resolv.conf`, so *no* client class had external DNS at all and Roblox
   Studio failed at launch with "Temporary failure in name resolution". Optionally uses
   `netshare/`'s `wait_until` for a nicer startup log; works without it.

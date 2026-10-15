@@ -42,6 +42,19 @@ set -u
 # Also measured: 10/10 SERVFAIL without the flag, 10/10 success with it, on
 # the same setup.
 #
+# ## No cache (--cache-size=0)
+#
+# This dnsmasq only forwards. Both upstreams answer without it: 127.0.0.11
+# is in-process for Docker, and router runs its own caching dnsmasq. A cache
+# here only added a second copy, and that copy was wrong exactly when it
+# mattered: Docker answers its own names with a 600s TTL, so after router was
+# recreated with a new IP every lookup of `router` kept returning the old one
+# for up to ten minutes - including this script's own change check below and
+# every consumer that re-resolves router to follow it (code-docker's nginx
+# allow list). When another container took the old address, that container
+# was the one allowed in. Measured: with the cache, `router` still pointed at
+# the reused address 12s after the recreate; without it, the new one.
+#
 # ## History
 #
 # Written for code-docker (`config/dns-local/dns-local.default.sh`,
@@ -111,7 +124,7 @@ resolve_router() {
 start_dnsmasq() {
     router_ip="$1"
     [ -z "$router_ip" ] && return 1
-    dnsmasq --no-daemon --no-resolv --strict-order \
+    dnsmasq --no-daemon --no-resolv --strict-order --cache-size=0 \
         --listen-address=127.0.0.1 --bind-interfaces \
         --server=127.0.0.11 --server="$router_ip" \
         --pid-file="$RUN_DIR/dns-local.pid" &

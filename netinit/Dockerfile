@@ -7,7 +7,7 @@
 FROM alpine:latest
 RUN apk add --no-cache iproute2
 # Pinned to this repo's own tag: set it to the tag being cut, in the commit that gets it.
-ARG ROUTER_CLIENT_REF=v0.1.0
+ARG ROUTER_CLIENT_REF=v0.1.1
 ADD https://github.com/qwreey/router-docker-client.git#${ROUTER_CLIENT_REF}:netshare /netshare
 COPY netinit-entrypoint.sh /netinit-entrypoint.sh
 ENTRYPOINT ["/netinit-entrypoint.sh"]
