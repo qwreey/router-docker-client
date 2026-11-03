@@ -113,13 +113,15 @@ warn_once() {
 	warn "$2"
 }
 
+# Bounded, so a wedged daemon costs one reconcile tick instead of stalling
+# the loop - and the TERM trap that removes our DOCKER-USER rules - forever.
 docker_api() {
-	curl -sf --unix-socket "$DOCKER_SOCK" "http://localhost$1" 2>/dev/null
+	curl -sf --connect-timeout 3 --max-time 10 --unix-socket "$DOCKER_SOCK" "http://localhost$1" 2>/dev/null
 }
 
 # curl -G so the filters JSON gets URL-encoded properly rather than hand-escaped.
 docker_api_filtered() {
-	curl -sf --unix-socket "$DOCKER_SOCK" -G \
+	curl -sf --connect-timeout 3 --max-time 10 --unix-socket "$DOCKER_SOCK" -G \
 		--data-urlencode "filters=$2" \
 		"http://localhost$1" 2>/dev/null
 }
@@ -291,7 +293,9 @@ $net_id"
 			live_bridges="$live_bridges $bridge"
 		fi
 	done
-	[ -n "$live_bridges" ] && cleanup_stale_rules "$live_bridges"
+	# Even with none live: the last exempt network going away must take its
+	# rule with it, not leave it until shutdown.
+	cleanup_stale_rules "$live_bridges"
 
 	# --- routes -------------------------------------------------------------
 	if [ "$ROUTES_ENABLED" = "false" ]; then

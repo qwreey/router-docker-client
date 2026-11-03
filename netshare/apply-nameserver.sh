@@ -16,6 +16,12 @@
 # consumers fetch this directory.
 apply_nameserver() {
     _ans_host="$1"
+    # Same ambiguity refusal as apply_default_route (apply-route.sh says why).
+    _ans_all="$(getent ahostsv4 "$_ans_host" 2>/dev/null | awk '{ print $1 }' | sort -u)"
+    if [ "$(printf '%s\n' "$_ans_all" | grep -c .)" -gt 1 ]; then
+        echo "apply_nameserver: WARNING $_ans_host resolves to more than one address ($(echo $_ans_all)) - leaving /etc/resolv.conf alone" >&2
+        return 1
+    fi
     _ans_ip="$(getent hosts "$_ans_host" 2>/dev/null | awk '{ print $1; exit }')"
     if [ -z "$_ans_ip" ]; then
         return 1

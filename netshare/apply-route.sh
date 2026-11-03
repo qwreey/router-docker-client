@@ -16,7 +16,18 @@ apply_default_route() {
     # could hand back an IPv6 address here, silently replacing the IPv6
     # default route while the IPv4 one goes stale. `ip -4` below guards the
     # same thing at the route-replace step itself.
-    _adr_gw="$(getent ahostsv4 "$_adr_host" 2>/dev/null | awk '{ print $1; exit }')"
+    #
+    # More than one distinct address means another container answers to the
+    # same alias on this network (Docker's DNS round-robins them), and the
+    # first answer would be whichever it handed out this time - a sibling
+    # claiming the router's alias would get this container's default route.
+    # Change nothing and say so; the caller's loop retries.
+    _adr_all="$(getent ahostsv4 "$_adr_host" 2>/dev/null | awk '{ print $1 }' | sort -u)"
+    if [ "$(printf '%s\n' "$_adr_all" | grep -c .)" -gt 1 ]; then
+        echo "apply_default_route: WARNING $_adr_host resolves to more than one address ($(echo $_adr_all)) - leaving the default route alone" >&2
+        return 1
+    fi
+    _adr_gw="$_adr_all"
 
     if [ -n "$_adr_gw" ]; then
         if ! _adr_err="$(ip -4 route replace default via "$_adr_gw" 2>&1)"; then
